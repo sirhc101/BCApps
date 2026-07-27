@@ -69,6 +69,8 @@ codeunit 20437 "Qlty. Notification Mgmt."
         OpenTheInspectionPageLbl: Label 'Open the inspection';
         AssignToYourselfNotificationTxt: Label 'Assign Quality Inspection to yourself';
         AssignToYourselfNotificationDescriptionTxt: Label 'Show a notification to provide the opportunity to assign the Quality Inspection to yourself.';
+        DontShowAgainLbl: Label 'Don''t show again';
+        HandleDontShowInspectionCreatedTok: Label 'HandleDontShowInspectionCreated', Locked = true;
         InspectionCreatedNotificationTxt: Label 'Quality Inspection created';
         InspectionCreatedNotificationDescriptionTxt: Label 'Show a notification that a Quality Inspection has been created.';
 
@@ -101,6 +103,7 @@ codeunit 20437 "Qlty. Notification Mgmt."
 
         Message := StrSubstNo(InspectionCreatedMsg, QltyInspectionHeader.GetFriendlyIdentifier());
         NotificationOptions.Add(OpenTheInspectionPageLbl, HandleOpenDocumentTok);
+        NotificationOptions.Add(DontShowAgainLbl, HandleDontShowInspectionCreatedTok);
         NotificationInspectionCreated.SetData(NotificationDataRelatedRecordIdTok, Format(QltyInspectionHeader.RecordId));
         CreateActionNotification(NotificationInspectionCreated, Message, NotificationOptions);
     end;
@@ -109,7 +112,7 @@ codeunit 20437 "Qlty. Notification Mgmt."
     /// Creates a notification that multiple inspections have been created.
     /// </summary>
     /// <param name="QltyInspectionHeader"></param>
-    internal procedure NotifyMultipleInspectionsCreated(QltyInspectionHeader: Record "Qlty. Inspection Header")
+    internal procedure NotifyMultipleInspectionsCreated(var QltyInspectionHeader: Record "Qlty. Inspection Header")
     var
         MyNotifications: Record "My Notifications";
         NotificationTestCreated: Notification;
@@ -125,8 +128,33 @@ codeunit 20437 "Qlty. Notification Mgmt."
 
         Message := StrSubstNo(MultipleInspectionsCreatedMsg, QltyInspectionHeader.Count());
         NotificationOptions.Add(ViewTheInspectionsPageLbl, HandleOpenMultipleInspectionsTok);
+        NotificationOptions.Add(DontShowAgainLbl, HandleDontShowInspectionCreatedTok);
         NotificationTestCreated.SetData(MultipleInspectionsNotificationDataFilterTok, QltyInspectionHeader.GetView());
         CreateActionNotification(NotificationTestCreated, Message, NotificationOptions);
+    end;
+
+    /// <summary>
+    /// Creates a notification that many inspections have been created, without opening a filtered list.
+    /// Used as a fallback when the number of inspections exceeds the safe filter length.
+    /// </summary>
+    /// <param name="InspectionCount">The number of inspections created</param>
+    internal procedure NotifyMultipleInspectionsCreatedByCount(InspectionCount: Integer)
+    var
+        MyNotifications: Record "My Notifications";
+        CountNotification: Notification;
+        Message: Text;
+        NotificationOptions: Dictionary of [Text, Text];
+    begin
+        if not GuiAllowed() then
+            exit;
+
+        InitializeInspectionCreatedNotification();
+        if not MyNotifications.IsEnabled(GetInspectionCreatedNotificationId()) then
+            exit;
+
+        Message := StrSubstNo(MultipleInspectionsCreatedMsg, InspectionCount);
+        NotificationOptions.Add(DontShowAgainLbl, HandleDontShowInspectionCreatedTok);
+        CreateActionNotification(CountNotification, Message, NotificationOptions);
     end;
 
     /// <summary>
@@ -242,7 +270,7 @@ codeunit 20437 "Qlty. Notification Mgmt."
                 DocumentNotAbleToBeCreatedAnMsg,
                 DocumentType,
                 QltyInspectionHeader."No.",
-                TempInstructionQltyDispositionBuffer."Qty. To Handle (Base)",
+                GetDisplayQuantityForFailure(QltyInspectionHeader, TempInstructionQltyDispositionBuffer),
                 GetSourceSummaryText(QltyInspectionHeader),
                 OptionalAdditionalMessageContext,
                 Item."Base Unit of Measure")
@@ -251,7 +279,7 @@ codeunit 20437 "Qlty. Notification Mgmt."
                 DocumentNotAbleToBeCreatedAMsg,
                 DocumentType,
                 QltyInspectionHeader."No.",
-                TempInstructionQltyDispositionBuffer."Qty. To Handle (Base)",
+                GetDisplayQuantityForFailure(QltyInspectionHeader, TempInstructionQltyDispositionBuffer),
                 GetSourceSummaryText(QltyInspectionHeader),
                 OptionalAdditionalMessageContext,
                 Item."Base Unit of Measure");
@@ -264,6 +292,29 @@ codeunit 20437 "Qlty. Notification Mgmt."
             end;
 
         CreateActionNotification(DocumentCreationFailedNotification, CurrentMessage, AvailableOptions);
+    end;
+
+    /// <summary>
+    /// Gets the quantity to show in the document creation failed message, falling back to the quantity implied by the quantity behavior when the instruction quantity is zero.
+    /// </summary>
+    /// <param name="QltyInspectionHeader">The inspection the failed document relates to.</param>
+    /// <param name="TempInstructionQltyDispositionBuffer">The attempted instruction.</param>
+    /// <returns>The quantity to display.</returns>
+    local procedure GetDisplayQuantityForFailure(QltyInspectionHeader: Record "Qlty. Inspection Header"; var TempInstructionQltyDispositionBuffer: Record "Qlty. Disposition Buffer" temporary): Decimal
+    begin
+        if TempInstructionQltyDispositionBuffer."Qty. To Handle (Base)" <> 0 then
+            exit(TempInstructionQltyDispositionBuffer."Qty. To Handle (Base)");
+
+        case TempInstructionQltyDispositionBuffer."Quantity Behavior" of
+            TempInstructionQltyDispositionBuffer."Quantity Behavior"::"Failed Quantity":
+                exit(QltyInspectionHeader."Fail Quantity");
+            TempInstructionQltyDispositionBuffer."Quantity Behavior"::"Passed Quantity":
+                exit(QltyInspectionHeader."Pass Quantity");
+            TempInstructionQltyDispositionBuffer."Quantity Behavior"::"Sample Quantity":
+                exit(QltyInspectionHeader."Sample Size");
+            else
+                exit(QltyInspectionHeader."Source Quantity (Base)");
+        end;
     end;
 
     /// <summary>
@@ -663,6 +714,19 @@ codeunit 20437 "Qlty. Notification Mgmt."
         MyNotifications: Record "My Notifications";
     begin
         MyNotifications.InsertDefault(GetInspectionCreatedNotificationId(), InspectionCreatedNotificationTxt, InspectionCreatedNotificationDescriptionTxt, true);
+    end;
+
+    /// <summary>
+    /// Disables the "Inspection Created" notification for the current user.
+    /// Procedure name must match HandleDontShowInspectionCreatedTok.
+    /// </summary>
+    /// <param name="DontShowNotification">The notification that triggered the action.</param>
+    internal procedure HandleDontShowInspectionCreated(DontShowNotification: Notification)
+    var
+        MyNotifications: Record "My Notifications";
+    begin
+        InitializeInspectionCreatedNotification();
+        MyNotifications.Disable(GetInspectionCreatedNotificationId());
     end;
 
     # region Event Subscribers

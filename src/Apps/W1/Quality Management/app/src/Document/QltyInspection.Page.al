@@ -27,6 +27,8 @@ page 20406 "Qlty. Inspection"
 {
     UsageCategory = None;
     Caption = 'Quality Inspection';
+    AboutTitle = 'About Quality Inspection document';
+    AboutText = 'The Quality Inspection document is used to manage quality inspections for items, including recording inspection results, taking pictures, and navigating to related documents. The header contains general information about the inspection, while the lines contain details about each quality test performed. You can also create re-inspections, print reports, and perform actions like moving inventory or changing item tracking information based on the inspection results.';
     DataCaptionExpression = GetDataCaptionExpression();
     InsertAllowed = false;
     PageType = Card;
@@ -102,6 +104,7 @@ page 20406 "Qlty. Inspection"
                     field(Status; Rec.Status)
                     {
                         Editable = false;
+                        StyleExpr = StatusStyleExpr;
                     }
                     field("Finished Date"; Rec."Finished Date")
                     {
@@ -227,7 +230,8 @@ page 20406 "Qlty. Inspection"
             }
             group(ControlInfo)
             {
-                Caption = 'Control Information';
+                Caption = 'Source Reference';
+
                 field("Source Table No."; Rec."Source Table No.")
                 {
                     Editable = false;
@@ -477,9 +481,15 @@ page 20406 "Qlty. Inspection"
                 ToolTip = 'Create a new re-inspection based on this inspection. If the inspection is still open, it will be finished first. Finishing may be blocked if the current result does not allow it.';
 
                 trigger OnAction()
+                var
+                    ReinspectionQltyInspectionHeader: Record "Qlty. Inspection Header";
                 begin
-                    Rec.CreateReinspection();
+                    Rec.CreateReinspection(ReinspectionQltyInspectionHeader);
                     CurrPage.Update(false);
+                    if not IsNullGuid(ReinspectionQltyInspectionHeader.SystemId) then begin
+                        Commit();
+                        Page.Run(Page::"Qlty. Inspection", ReinspectionQltyInspectionHeader);
+                    end;
                 end;
             }
             action(ChangeStatusFinish)
@@ -509,7 +519,7 @@ page 20406 "Qlty. Inspection"
                 PromotedCategory = Process;
                 PromotedIsBig = true;
                 PromotedOnly = true;
-                ToolTip = 'Reopen';
+                ToolTip = 'Reopen a finished inspection. Only users with the Quality Admin & Supervisor role can perform this action.';
                 Enabled = CanReopen;
 
                 trigger OnAction()
@@ -549,7 +559,7 @@ page 20406 "Qlty. Inspection"
             {
                 Caption = 'Create Internal Put-away';
                 Image = CreatePutAway;
-                ToolTip = 'Creates an Internal Put-away document.';
+                ToolTip = 'Create an Internal Put-away document.';
 
                 trigger OnAction()
                 var
@@ -627,7 +637,7 @@ page 20406 "Qlty. Inspection"
             {
                 PromotedCategory = Report;
                 Caption = 'Certificate of Analysis';
-                ToolTip = 'Certificate of Analysis (CoA) for this inspection.';
+                ToolTip = 'Print a certificate of analysis (CoA) report.';
                 Image = Certificate;
                 Promoted = true;
                 PromotedIsBig = true;
@@ -647,7 +657,7 @@ page 20406 "Qlty. Inspection"
             {
                 PromotedCategory = Report;
                 Caption = 'Non Conformance Report';
-                ToolTip = 'Specifies the Non Conformance Report has a layout suitable for quality inspection templates that typically contain Non Conformance Report questions.';
+                ToolTip = 'Print a non-conformance inspection report.';
                 Image = Report;
                 Promoted = true;
                 PromotedIsBig = true;
@@ -667,7 +677,7 @@ page 20406 "Qlty. Inspection"
             {
                 PromotedCategory = Report;
                 Caption = 'Inspection Report';
-                ToolTip = 'General purpose inspection report.';
+                ToolTip = 'Print a general-purpose inspection report.';
                 Image = Report;
                 Promoted = true;
                 PromotedIsBig = true;
@@ -704,9 +714,9 @@ page 20406 "Qlty. Inspection"
             }
             action(OpenSourceDocument)
             {
-                Caption = 'Open Source Document';
+                Caption = 'Show source document';
                 Image = ViewSourceDocumentLine;
-                ToolTip = 'Opens the related source document.';
+                ToolTip = 'Open the related source document.';
 
                 trigger OnAction()
                 var
@@ -834,6 +844,7 @@ page 20406 "Qlty. Inspection"
         VisibleDocumentNo, VisibleDocumentLineNo : Boolean;
         VisibleSourceTaskNo, VisibleSourceType, VisibleSourceSubType : Boolean;
         CanChangeQuantity: Boolean;
+        StatusStyleExpr: Text;
 
     trigger OnOpenPage()
     begin
@@ -857,9 +868,11 @@ page 20406 "Qlty. Inspection"
         TempItemTrackingSetup: Record "Item Tracking Setup" temporary;
     begin
         IsOpen := Rec.Status = Rec.Status::Open;
-        CanReopen := not Rec.HasMoreRecentReinspection();
+        StatusStyleExpr := Rec.GetStatusStyleExpression();
+
+        CanReopen := (Rec.Status <> Rec.Status::Open) and not Rec.HasMoreRecentReinspection();
         CanFinish := Rec.Status <> Rec.Status::Finished;
-        if Rec.Status = Rec.Status::Open then
+        if IsOpen then
             if QltyPermissionMgmt.CanChangeItemTracking() then begin
                 TempItemTrackingSetup."Lot No. Required" := true;
                 TempItemTrackingSetup."Serial No. Required" := true;

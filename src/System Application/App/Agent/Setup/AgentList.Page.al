@@ -5,8 +5,6 @@
 
 namespace System.Agents;
 
-using System.Environment.Consumption;
-
 page 4316 "Agent List"
 {
     PageType = List;
@@ -92,22 +90,41 @@ page 4316 "Agent List"
                     Page.Run(Page::"Agent Task List", AgentTask);
                 end;
             }
+        }
+        area(Navigation)
+        {
+            action(AgentConfigurationRights)
+            {
+                ApplicationArea = All;
+                Caption = 'Agent configuration rights';
+                ToolTip = 'View who can create new agents';
+                Image = Permission;
+                RunObject = Page "Agent Creation Control";
+            }
             action(ShowConsumptionData)
             {
                 ApplicationArea = All;
-                Caption = 'View consumption data';
+                Caption = 'Consumption data';
                 ToolTip = 'View AI consumption data for this agent.';
                 Image = BankAccountLedger;
 
                 trigger OnAction()
                 var
-                    UserAIConsumptionData: Record "User AI Consumption Data";
+                    AgentConsumptionOverview: Codeunit "Agent Consumption Overview";
                 begin
                     if Rec.IsEmpty() then
                         Error(NoAgentSetupErr);
-                    UserAIConsumptionData.SetRange("User ID", Rec."User Security ID");
-                    Page.Run(Page::"Agent Consumption Overview", UserAIConsumptionData);
+
+                    AgentConsumptionOverview.OpenAgentConsumptionOverview(Rec."User Security ID");
                 end;
+            }
+            action(AgentModels)
+            {
+                ApplicationArea = All;
+                Caption = 'Agent models';
+                ToolTip = 'View all agent models.';
+                Image = ViewPage;
+                RunObject = Page "Agent Model List";
             }
         }
         area(Promoted)

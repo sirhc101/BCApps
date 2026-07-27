@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/microsoft/AL-Go/dc3e26be0e944a133933216cae88cf8f86263a28/Actions/.Modules/settings.schema.json",
+  "$schema": "https://raw.githubusercontent.com/microsoft/AL-Go/16948d91ca57e875e3d823536bac740c0ca1fdbd/Actions/.Modules/settings.schema.json",
   "projectName": "Apps (W1)",
   "appFolders": [
     "../../../src/Apps/W1/*/App",
@@ -11,7 +11,8 @@
     "../../../src/Apps/W1/*/Demo Data",
     "../../../src/Apps/W1/*/*/Test",
     "../../../src/Apps/W1/*/*/Test Library",
-    "../../../src/Apps/W1/*/*/Demo Data"
+    "../../../src/Apps/W1/*/*/Demo Data",
+    "../../../src/Apps/W1/QualityManagementContosoCoffeeDemoDataset"
   ],
   "installOnlyReferencedApps": false,
   "doNotRunPageScriptingTests": true,
